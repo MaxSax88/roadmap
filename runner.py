@@ -25,12 +25,12 @@ def extract_shape_outline(image_path, resize_dim=(500, 500)):
     image = cv2.resize(image, resize_dim)
 
     _, thresh = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY_INV)  # Invert colors
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     # Find the largest contour (assumes it's the shape)
     if contours:
         largest_contour = max(contours, key=cv2.contourArea)
-        shape_points = [(pt[0][0], pt[0][1]) for pt in largest_contour]
+        shape_points = [(pt[0][0], pt[0][1]) for pt in contours]
         print(shape_points)
         return shape_points
     return []
