@@ -1,162 +1,111 @@
+import tkinter as tk
 import osmnx as ox
 import networkx as nx
-import numpy as np
-import cv2
 import folium
-from shapely.geometry import LineString, Point
+import numpy as np
 
 
-# ============================
-# 1️⃣ Load and Process Input Shape
-# ============================
+class DrawApp:
+    def __init__(self, root, process_callback):
+        self.root = root
+        self.root.title("Draw and Generate Route")
 
-def extract_shape_outline(image_path, resize_dim=(500, 500)):
-    """
-    Extracts the contour (outline) of a shape from an input image.
+        self.canvas = tk.Canvas(root, width=500, height=500, bg="white")
+        self.canvas.pack()
 
-    Args:
-        image_path (str): Path to the input image.
-        resize_dim (tuple): New dimensions for the image.
+        self.points = []
+        self.canvas.bind("<Button-1>", self.get_coordinates)
 
-    Returns:
-        list: List of (x, y) points representing the shape's contour.
-    """
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, resize_dim)
+        self.process_callback = process_callback  # Function to process points
 
-    _, thresh = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY_INV)  # Invert colors
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        # Add a button to process points and generate the map
+        self.button = tk.Button(root, text="Generate Route", command=self.process_points)
+        self.button.pack()
 
-    # Find the largest contour (assumes it's the shape)
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        shape_points = [(pt[0][0], pt[0][1]) for pt in contours]
-        print(shape_points)
-        return shape_points
-    return []
+    def get_coordinates(self, event):
+        """Store clicked coordinates and draw a point."""
+        x, y = event.x, event.y
+        self.points.append((x, y))
+        self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill="red")
 
+    def process_points(self):
+        """Process clicked points when the button is pressed."""
+        if self.points:
+            self.process_callback(self.points)  # Call function with points
 
-# ============================
-# 2️⃣ Match Shape to Road Network
-# ============================
 
 def get_nearest_road_nodes(graph, shape_points, map_bounds):
-    """
-    Maps shape contour points to the nearest road network nodes.
-
-    Args:
-        graph: Road network graph from OSM.
-        shape_points: List of (x, y) points representing the shape.
-        map_bounds: Bounding box of the area (lat_min, lat_max, lon_min, lon_max).
-
-    Returns:
-        list: List of nearest road nodes that approximate the shape.
-    """
+    """Convert clicked canvas points to lat/lon and find nearest road nodes."""
     lat_min, lat_max, lon_min, lon_max = map_bounds
+    points_array = np.array(shape_points, dtype=np.float64)
 
-    # Normalize shape points to the bounding box
-    shape_points = np.array(shape_points)
-    shape_points[:, 0] = lat_min + (shape_points[:, 0] / 500) * (lat_max - lat_min)
-    shape_points[:, 1] = lon_min + (shape_points[:, 1] / 500) * (lon_max - lon_min)
+    # Convert canvas (x,y) to lat/lon
+    points_array[:, 1] = lon_min + (points_array[:, 0] / 500) * (lon_max - lon_min)
+    points_array[:, 0] = lat_max - (points_array[:, 1] / 500) * (lat_max - lat_min)  # Flipping Y-axis
 
-    # Find nearest road nodes for each shape point
     road_nodes = []
-    for lat, lon in shape_points:
+    nearest_points = []
+    for lat, lon in points_array:
         nearest_node = ox.distance.nearest_nodes(graph, lon, lat)
         road_nodes.append(nearest_node)
+        nearest_points.append((lat, lon))
 
-    return road_nodes
+    return road_nodes, points_array.tolist(), nearest_points
 
-
-# ============================
-# 3️⃣ Generate a Route Following Roads
-# ============================
 
 def generate_road_route(graph, road_nodes):
-    """
-    Finds the best road-based route that follows the mapped shape.
-
-    Args:
-        graph: Road network graph from OSM.
-        road_nodes: List of mapped road network nodes.
-
-    Returns:
-        list: List of road segments forming the route.
-    """
+    """Find the shortest path between the clicked points."""
     route = []
     for i in range(len(road_nodes) - 1):
         try:
             path = nx.shortest_path(graph, road_nodes[i], road_nodes[i + 1], weight='length')
             route.extend(path)
         except nx.NetworkXNoPath:
-            continue  # Skip if no path exists between nodes
+            continue
+    return list(dict.fromkeys(route))  # Remove duplicates while preserving order
 
-    return list(dict.fromkeys(route))  # Remove duplicates
 
-
-# ============================
-# 4️⃣ Plot the Final Route on a Map
-# ============================
-
-def plot_route_on_map(graph, route_nodes, center_latlon):
-    """
-    Plots the generated road-based route on an interactive map.
-
-    Args:
-        graph: Road network graph.
-        route_nodes: List of nodes forming the route.
-        center_latlon: Tuple of (latitude, longitude) for map center.
-    """
+def plot_route_on_map(graph, route_nodes, original_points, nearest_points, center_latlon, output_file="route.html"):
+    """Plot the route on a folium map, including original clicked points and nearest road nodes."""
     m = folium.Map(location=center_latlon, zoom_start=14)
 
-    # Convert nodes to coordinates
+    # Plot the original clicked points (in red)
+    for lat, lon in original_points:
+        folium.CircleMarker(location=[lat, lon], radius=5, color="red", fill=True, fill_color="red",
+                            popup="Clicked Point").add_to(m)
+
+    # Plot the snapped nearest road nodes (in blue)
+    for lat, lon in nearest_points:
+        folium.CircleMarker(location=[lat, lon], radius=5, color="blue", fill=True, fill_color="blue",
+                            popup="Nearest Road Node").add_to(m)
+
+    # Plot the road route (in green)
     route_coords = [(graph.nodes[n]['y'], graph.nodes[n]['x']) for n in route_nodes]
+    folium.PolyLine(route_coords, color='green', weight=5, opacity=0.8).add_to(m)
 
-    # Plot the route
-    folium.PolyLine(route_coords, color='blue', weight=5, opacity=0.8).add_to(m)
-
-    # Show the map
-    return m
+    m.save(output_file)
+    print(f"✅ Route saved as {output_file}")
 
 
-# ============================
-# 5️⃣ Main Execution
-# ============================
+def process_drawn_points(points):
+    """Callback function for processing user-drawn points."""
+    place_name = "Haywards Heath, UK"
+    graph = ox.graph_from_place(place_name, network_type="walk")
+    bounds = ox.geocode_to_gdf(place_name).total_bounds
 
-def main():
-    # 1️⃣ Extract shape points from input image
-    shape_image = r"C:\Users\mgbsa\Desktop\sauqre.jpg"  # Replace with your input shape image
-    shape_points = extract_shape_outline(shape_image)
+    road_nodes, original_latlons, nearest_latlons = get_nearest_road_nodes(graph, points, bounds)
 
-    if not shape_points:
-        print("❌ No shape detected!")
-        return
+    print("Original clicked lat/lons:", original_latlons)
+    print("Nearest road nodes lat/lons:", nearest_latlons)
 
-    # 2️⃣ Define map location (e.g., central London)
-    place_name = "Edinburgh, UK"
-    graph = ox.graph_from_place(place_name, network_type="drive")
+    route = generate_road_route(graph, road_nodes)
 
-    # Get bounding box of the area
-    bounds = ox.geocode_to_gdf(place_name).total_bounds  # (lon_min, lat_min, lon_max, lat_max)
-
-    # 3️⃣ Map shape to road network
-    road_nodes = get_nearest_road_nodes(graph, shape_points, bounds)
-
-    # 4️⃣ Generate the road-following route
-    route_nodes = generate_road_route(graph, road_nodes)
-
-    if not route_nodes:
-        print("❌ No valid route found!")
-        return
-
-    # 5️⃣ Display the route on a map
-    map_center = (bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2  # Average center
-    route_map = plot_route_on_map(graph, route_nodes, map_center)
-
-    # Save and display map
-    route_map.save("route_map.html")
-    print("✅ Route generated! Open 'route_map.html' in a browser.")
+    # Compute map center
+    map_center = ((bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2)
+    plot_route_on_map(graph, route, original_latlons, nearest_latlons, map_center)
 
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = DrawApp(root, process_callback=process_drawn_points)
+    root.mainloop()  # Keeps Tkinter open until user closes it
