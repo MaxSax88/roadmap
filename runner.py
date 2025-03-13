@@ -32,25 +32,23 @@ class DrawApp:
         """Process clicked points when the button is pressed."""
         if self.points:
             self.process_callback(self.points)  # Call function with points
+        self.root.destroy()
+
 
 
 def get_nearest_road_nodes(graph, shape_points, map_bounds):
     """Convert clicked canvas points to lat/lon and find nearest road nodes."""
-    lat_min, lat_max, lon_min, lon_max = map_bounds
+    x_min, y_min, x_max, y_max = map_bounds
     points_array = np.array(shape_points, dtype=np.float64)
-
-    # Convert canvas (x,y) to lat/lon
-    points_array[:, 1] = lon_min + (points_array[:, 0] / 500) * (lon_max - lon_min)
-    points_array[:, 0] = lat_max - (points_array[:, 1] / 500) * (lat_max - lat_min)  # Flipping Y-axis
-
+    points_array[:, 0] = x_min + (points_array[:, 0] / 500) * (x_max - x_min)
+    points_array[:, 1] = y_min + (points_array[:, 1] / 500) * (y_max - y_min)
     road_nodes = []
-    nearest_points = []
-    for lat, lon in points_array:
-        nearest_node = ox.distance.nearest_nodes(graph, lon, lat)
+    for x, y in points_array:
+        print("x = " + str(x) + " y = " + str(y))
+        nearest_node = ox.distance.nearest_nodes(graph, x, y)
+        print(nearest_node)
         road_nodes.append(nearest_node)
-        nearest_points.append((lat, lon))
-
-    return road_nodes, points_array.tolist(), nearest_points
+    return road_nodes
 
 
 def generate_road_route(graph, road_nodes):
@@ -62,22 +60,14 @@ def generate_road_route(graph, road_nodes):
             route.extend(path)
         except nx.NetworkXNoPath:
             continue
+    last_path = nx.shortest_path(graph, road_nodes[-1], road_nodes[0], weight='length')
+    route.extend(last_path)
     return list(dict.fromkeys(route))  # Remove duplicates while preserving order
 
 
-def plot_route_on_map(graph, route_nodes, original_points, nearest_points, center_latlon, output_file="route.html"):
+def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html"):
     """Plot the route on a folium map, including original clicked points and nearest road nodes."""
     m = folium.Map(location=center_latlon, zoom_start=14)
-
-    # Plot the original clicked points (in red)
-    for lat, lon in original_points:
-        folium.CircleMarker(location=[lat, lon], radius=5, color="red", fill=True, fill_color="red",
-                            popup="Clicked Point").add_to(m)
-
-    # Plot the snapped nearest road nodes (in blue)
-    for lat, lon in nearest_points:
-        folium.CircleMarker(location=[lat, lon], radius=5, color="blue", fill=True, fill_color="blue",
-                            popup="Nearest Road Node").add_to(m)
 
     # Plot the road route (in green)
     route_coords = [(graph.nodes[n]['y'], graph.nodes[n]['x']) for n in route_nodes]
@@ -92,21 +82,17 @@ def process_drawn_points(points):
     place_name = "Edinburgh, UK"
     graph = ox.graph_from_place(place_name, network_type="walk")
     bounds = ox.geocode_to_gdf(place_name).total_bounds
-    print(bounds)
 
-    road_nodes, original_latlons, nearest_latlons = get_nearest_road_nodes(graph, points, bounds)
-
-    print("Original clicked lat/lons:", original_latlons)
-    print("Nearest road nodes lat/lons:", nearest_latlons)
+    road_nodes = get_nearest_road_nodes(graph, points, bounds)
 
     route = generate_road_route(graph, road_nodes)
 
     # Compute map center
     map_center = ((bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2)
-    plot_route_on_map(graph, route, original_latlons, nearest_latlons, map_center)
+    plot_route_on_map(graph, route, map_center)
 
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = DrawApp(root, process_callback=process_drawn_points)
-    root.mainloop()  # Keeps Tkinter open until user closes it
+    root.mainloop()
