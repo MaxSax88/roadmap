@@ -38,6 +38,7 @@ def get_nearest_road_nodes(graph, shape_points, map_bounds):
     """Convert clicked canvas points to lat/lon and find nearest road nodes."""
     lat_min, lat_max, lon_min, lon_max = map_bounds
     points_array = np.array(shape_points, dtype=np.float64)
+    print(graph.nodes()[0])
 
     # Convert canvas (x,y) to lat/lon
     points_array[:, 1] = lon_min + (points_array[:, 0] / 500) * (lon_max - lon_min)
