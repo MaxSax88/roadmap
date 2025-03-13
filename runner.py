@@ -38,7 +38,6 @@ def get_nearest_road_nodes(graph, shape_points, map_bounds):
     """Convert clicked canvas points to lat/lon and find nearest road nodes."""
     lat_min, lat_max, lon_min, lon_max = map_bounds
     points_array = np.array(shape_points, dtype=np.float64)
-    print(graph.nodes()[0])
 
     # Convert canvas (x,y) to lat/lon
     points_array[:, 1] = lon_min + (points_array[:, 0] / 500) * (lon_max - lon_min)
@@ -90,9 +89,10 @@ def plot_route_on_map(graph, route_nodes, original_points, nearest_points, cente
 
 def process_drawn_points(points):
     """Callback function for processing user-drawn points."""
-    place_name = "Haywards Heath, UK"
+    place_name = "Edinburgh, UK"
     graph = ox.graph_from_place(place_name, network_type="walk")
     bounds = ox.geocode_to_gdf(place_name).total_bounds
+    print(bounds)
 
     road_nodes, original_latlons, nearest_latlons = get_nearest_road_nodes(graph, points, bounds)
 
