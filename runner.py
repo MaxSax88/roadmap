@@ -19,6 +19,18 @@ class DrawApp:
 
         self.process_callback = process_callback  # Function to process points
 
+        # Distance input field
+        self.label = tk.Label(root, text="Target Distance (km):")
+        self.label.pack()
+        self.distance_entry = tk.Entry(root)
+        self.distance_entry.pack()
+
+        # Postcode input field
+        self.label = tk.Label(root, text="Postcode:")
+        self.label.pack()
+        self.postcode = tk.Entry(root)
+        self.postcode.pack()
+
         # Add a button to process points and generate the map
         self.button = tk.Button(root, text="Generate Route", command=self.process_points)
         self.button.pack()
@@ -63,7 +75,7 @@ def generate_road_route(graph, road_nodes):
             continue
     last_path = nx.shortest_path(graph, road_nodes[-1], road_nodes[0], weight='length')
     route.extend(last_path)
-    print(distance)
+    print(f'The route I found you is {distance/1000:.0f}km long. Happy tracks!')
     return list(dict.fromkeys(route))  # Remove duplicates while preserving order
 
 
@@ -81,9 +93,6 @@ def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html
 
 def process_drawn_points(points):
     """Callback function for processing user-drawn points."""
-    #place_name = "EH75AF, Edinburgh, UK"
-    #graph = ox.graph_from_place(place_name, network_type="walk")
-    #graph = ox.graph_from_address(place_name, network_type="walk", dist=10000, dist_type="bbox")
     postcode = "EH7 5AF"
     lat,lon = get_lat_lon(postcode=postcode)
     graph = ox.graph_from_point((lat, lon), network_type='walk', dist=5000,dist_type="bbox")
