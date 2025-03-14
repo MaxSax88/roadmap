@@ -3,6 +3,7 @@ import osmnx as ox
 import networkx as nx
 import folium
 import numpy as np
+from get_lat_lon import get_lat_lon
 
 
 class DrawApp:
@@ -44,9 +45,7 @@ def get_nearest_road_nodes(graph, shape_points, map_bounds):
     points_array[:, 1] = y_min + (points_array[:, 1] / 500) * (y_max - y_min)
     road_nodes = []
     for x, y in points_array:
-        print("x = " + str(x) + " y = " + str(y))
         nearest_node = ox.distance.nearest_nodes(graph, x, y)
-        print(nearest_node)
         road_nodes.append(nearest_node)
     return road_nodes
 
@@ -54,14 +53,17 @@ def get_nearest_road_nodes(graph, shape_points, map_bounds):
 def generate_road_route(graph, road_nodes):
     """Find the shortest path between the clicked points."""
     route = []
+    distance = 0
     for i in range(len(road_nodes) - 1):
         try:
             path = nx.shortest_path(graph, road_nodes[i], road_nodes[i + 1], weight='length')
             route.extend(path)
+            distance += nx.shortest_path_length(graph, road_nodes[i], road_nodes[i+1], weight="length")
         except nx.NetworkXNoPath:
             continue
     last_path = nx.shortest_path(graph, road_nodes[-1], road_nodes[0], weight='length')
     route.extend(last_path)
+    print(distance)
     return list(dict.fromkeys(route))  # Remove duplicates while preserving order
 
 
@@ -79,9 +81,14 @@ def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html
 
 def process_drawn_points(points):
     """Callback function for processing user-drawn points."""
-    place_name = "Edinburgh, UK"
-    graph = ox.graph_from_place(place_name, network_type="walk")
-    bounds = ox.geocode_to_gdf(place_name).total_bounds
+    #place_name = "EH75AF, Edinburgh, UK"
+    #graph = ox.graph_from_place(place_name, network_type="walk")
+    #graph = ox.graph_from_address(place_name, network_type="walk", dist=10000, dist_type="bbox")
+    postcode = "EH7 5AF"
+    lat,lon = get_lat_lon(postcode=postcode)
+    graph = ox.graph_from_point((lat, lon), network_type='walk', dist=5000,dist_type="bbox")
+    nodes, edges = ox.graph_to_gdfs(graph)
+    bounds = nodes.total_bounds
 
     road_nodes = get_nearest_road_nodes(graph, points, bounds)
 
