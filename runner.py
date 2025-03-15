@@ -3,6 +3,8 @@ import osmnx as ox
 import networkx as nx
 import folium
 import numpy as np
+from sympy.codegen.ast import float64
+
 from get_lat_lon import get_lat_lon
 
 
@@ -44,17 +46,30 @@ class DrawApp:
     def process_points(self):
         """Process clicked points when the button is pressed."""
         if self.points:
-            self.process_callback(self.points)  # Call function with points
+            self.process_callback(self.points,self.distance_entry,self.postcode)  # Call function with points
         self.root.destroy()
 
+def scale_points(points,distance):
+    no_points = len(points)
+    points = np.array(points,dtype=float)
+    input_distance = 0
+    for i in range (0,no_points-1):
+        input_distance += np.linalg.norm(points[i+1]-points[i])
+    input_distance += np.linalg.norm(points[0]-points[-1])
+    scaling_factor = 0.85*50*distance/input_distance
+    #centralise your points
+    points = points - (250,250)
+    #scale your points
+    points = points * scaling_factor
+    return points
 
 
-def get_nearest_road_nodes(graph, shape_points, map_bounds):
+def get_nearest_road_nodes(graph, shape_points, map_bounds, distance):
     """Convert clicked canvas points to lat/lon and find nearest road nodes."""
+    points_array = scale_points(shape_points,distance)
     x_min, y_min, x_max, y_max = map_bounds
-    points_array = np.array(shape_points, dtype=np.float64)
-    points_array[:, 0] = x_min + (points_array[:, 0] / 500) * (x_max - x_min)
-    points_array[:, 1] = y_min + (points_array[:, 1] / 500) * (y_max - y_min)
+    points_array[:, 0] = (x_min+x_max)/2 + (points_array[:, 0] / 500) * (x_max - x_min)
+    points_array[:, 1] = (y_min+y_max)/2 + (points_array[:, 1] / 500) * (y_max - y_min)
     road_nodes = []
     for x, y in points_array:
         nearest_node = ox.distance.nearest_nodes(graph, x, y)
@@ -91,15 +106,16 @@ def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html
     print(f"✅ Route saved as {output_file}")
 
 
-def process_drawn_points(points):
+def process_drawn_points(points,distance_widget,postcode_widget):
     """Callback function for processing user-drawn points."""
-    postcode = "EH7 5AF"
+    postcode = postcode_widget.get().strip()
+    distance = float(distance_widget.get().strip())
     lat,lon = get_lat_lon(postcode=postcode)
     graph = ox.graph_from_point((lat, lon), network_type='walk', dist=5000,dist_type="bbox")
     nodes, edges = ox.graph_to_gdfs(graph)
     bounds = nodes.total_bounds
 
-    road_nodes = get_nearest_road_nodes(graph, points, bounds)
+    road_nodes = get_nearest_road_nodes(graph, points, bounds, distance)
 
     route = generate_road_route(graph, road_nodes)
 
