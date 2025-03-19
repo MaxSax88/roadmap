@@ -56,7 +56,7 @@ def scale_points(points,distance):
     for i in range (0,no_points-1):
         input_distance += np.linalg.norm(points[i+1]-points[i])
     input_distance += np.linalg.norm(points[0]-points[-1])
-    scaling_factor = 0.85*50*distance/input_distance
+    scaling_factor = 0.9*50*distance/input_distance
     #centralise your points
     points = points - points[0,:]
     #scale your points
@@ -125,8 +125,10 @@ def process_drawn_points(points,distance_widget,postcode_widget):
     nodes, edges = ox.graph_to_gdfs(graph)
     bounds = nodes.total_bounds
 
-    rotations = [0,np.pi/2,np.pi,3*np.pi/2]
-    perturbations = [(0,0),(10,0),(-10,0),(0,10),(10,10),(-10,10),(0,-10),(-10,-10),(10,-10)]
+    rotations = [0,np.pi/4,np.pi/2,np.pi*3/4,np.pi,np.pi*5/4,3*np.pi/2,np.pi*7/4]
+    shifts = [0,5,10,15,20]
+    perturbations = [(x,y) for x in shifts for y in shifts]
+    #perturbations = [(0,0),(10,0),(-10,0),(0,10),(10,10),(-10,10),(0,-10),(-10,-10),(10,-10)]
     best_distance = 100000000000
     best_route = []
     #best_route, best_distance = get_route(graph, points, bounds, distance, 0)
