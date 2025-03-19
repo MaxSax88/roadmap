@@ -58,15 +58,21 @@ def scale_points(points,distance):
     input_distance += np.linalg.norm(points[0]-points[-1])
     scaling_factor = 0.85*50*distance/input_distance
     #centralise your points
-    points = points - (250,250)
+    points = points - points[0,:]
     #scale your points
     points = points * scaling_factor
     return points
 
+def rotate_points(points, rotation):
+    rotation_matrix = np.array([[np.cos(rotation),-np.sin(rotation)], [np.sin(rotation),np.cos(rotation)]])
+    points = points @ rotation_matrix
+    return points
 
-def get_nearest_road_nodes(graph, shape_points, map_bounds, distance):
+
+def get_nearest_road_nodes(graph, shape_points, map_bounds, distance,rotation,perturbation):
     """Convert clicked canvas points to lat/lon and find nearest road nodes."""
-    points_array = scale_points(shape_points,distance)
+    points_array = rotate_points(scale_points(shape_points,distance),rotation)
+    points_array = points_array + perturbation
     x_min, y_min, x_max, y_max = map_bounds
     points_array[:, 0] = (x_min+x_max)/2 + (points_array[:, 0] / 500) * (x_max - x_min)
     points_array[:, 1] = (y_min+y_max)/2 + (points_array[:, 1] / 500) * (y_max - y_min)
@@ -90,8 +96,7 @@ def generate_road_route(graph, road_nodes):
             continue
     last_path = nx.shortest_path(graph, road_nodes[-1], road_nodes[0], weight='length')
     route.extend(last_path)
-    print(f'The route I found you is {distance/1000:.0f}km long. Happy tracks!')
-    return list(dict.fromkeys(route))  # Remove duplicates while preserving order
+    return list(dict.fromkeys(route)) , distance
 
 
 def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html"):
@@ -106,6 +111,11 @@ def plot_route_on_map(graph, route_nodes, center_latlon, output_file="route.html
     print(f"✅ Route saved as {output_file}")
 
 
+def get_route(graph, points, bounds, distance,rotation,perturbation):
+    road_nodes = get_nearest_road_nodes(graph, points, bounds, distance,rotation,perturbation)
+    route,distance = generate_road_route(graph, road_nodes)
+    return route, distance
+
 def process_drawn_points(points,distance_widget,postcode_widget):
     """Callback function for processing user-drawn points."""
     postcode = postcode_widget.get().strip()
@@ -115,13 +125,21 @@ def process_drawn_points(points,distance_widget,postcode_widget):
     nodes, edges = ox.graph_to_gdfs(graph)
     bounds = nodes.total_bounds
 
-    road_nodes = get_nearest_road_nodes(graph, points, bounds, distance)
-
-    route = generate_road_route(graph, road_nodes)
-
+    rotations = [0,np.pi/2,np.pi,3*np.pi/2]
+    perturbations = [(0,0),(10,0),(-10,0),(0,10),(10,10),(-10,10),(0,-10),(-10,-10),(10,-10)]
+    best_distance = 100000000000
+    best_route = []
+    #best_route, best_distance = get_route(graph, points, bounds, distance, 0)
+    for r in rotations:
+        for p in perturbations:
+            route,distance = get_route(graph,points, bounds, distance, r,p)
+            if distance < best_distance:
+                best_distance = distance
+                best_route = route
+    print(f'The route I found you is {best_distance / 1000:.0f}km long. Happy tracks!')
     # Compute map center
     map_center = ((bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2)
-    plot_route_on_map(graph, route, map_center)
+    plot_route_on_map(graph, best_route, map_center)
 
 
 if __name__ == "__main__":
